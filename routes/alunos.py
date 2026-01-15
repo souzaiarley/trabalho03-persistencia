@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from beanie import PydanticObjectId
 from fastapi_pagination import Page
 from fastapi_pagination.ext.beanie import apaginate
-from models import Aluno, AlunoCreate, AlunoUpdate, Emprestimo
+from models import Aluno, AlunoCreate, AlunoUpdate, Emprestimo, EmprestimoWithLivroOut, LivroOut
 
 router = APIRouter(
     prefix="/alunos",
@@ -46,14 +46,27 @@ async def delete_aluno(aluno_id: PydanticObjectId):
 
 # Relacionamento com emprestimos
 
-@router.get("/{aluno_id}/emprestimos", response_model=list[Emprestimo])
+@router.get("/{aluno_id}/emprestimos", response_model=Page[EmprestimoWithLivroOut])
 async def get_emprestimos_aluno(aluno_id: PydanticObjectId):
     aluno = await Aluno.get(aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
-    return await apaginate(
-        Emprestimo.find(
-            Emprestimo.aluno.id == aluno_id
-        ).fetch_links()
-    )
+    query = Emprestimo.find(Emprestimo.aluno.id == aluno_id).fetch_links()
+
+    async def transform(emprestimo):
+        return EmprestimoWithLivroOut(
+            id=str(emprestimo.id),
+            data_emprestimo=emprestimo.data_emprestimo,
+            data_devolucao_prevista=emprestimo.data_devolucao_prevista,
+            data_devolucao=emprestimo.data_devolucao,
+            livro=LivroOut(
+                id=str(emprestimo.livro.id),
+                titulo=emprestimo.livro.titulo,
+                ano=emprestimo.livro.ano,
+                isbn=emprestimo.livro.isbn,
+                categoria=emprestimo.livro.categoria
+            )
+        )
+    
+    return await apaginate(query, transform=transform)
