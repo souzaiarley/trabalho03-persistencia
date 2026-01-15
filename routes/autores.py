@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlmodel import Session, select
-from models.autor import Autor
+from fastapi import APIRouter, HTTPException
+from beanie import PydanticObjectId
+from fastapi_pagination import Page
+from fastapi_pagination.ext.beanie import apaginate
+from typing import List
+from models.autor import Autor, AutorCreate, AutorUpdate
 from models.livro import Livro
-from models.livro_autor_link import LivroAutorLink
-from database import get_session
 
 router = APIRouter(
     prefix="/autores",
@@ -11,102 +12,113 @@ router = APIRouter(
 )
 
 @router.post("/", response_model=Autor)
-def create_autor(autor: Autor, session: Session = Depends(get_session)):
+async def create_autor(autor_data: AutorCreate):
     """Cria um novo autor."""
-    session.add(autor)
-    session.commit()
-    session.refresh(autor)
+    autor = Autor(**autor_data.model_dump())
+    await autor.insert()
     return autor
 
-@router.get("/", response_model=list[Autor])
-def read_autores(offset: int = 0, limit: int = Query(default=10, le=100),
-                 session: Session = Depends(get_session)):
+@router.get("/", response_model=Page[Autor])
+async def read_autores():
     """Retorna uma lista de autores com paginação."""
-    autores = session.exec(select(Autor).offset(offset).limit(limit)).all()
-    return autores
+    return await apaginate(Autor)
 
 @router.get("/{autor_id}", response_model=Autor)
-def read_autor(autor_id: int, session: Session = Depends(get_session)):
+async def read_autor(autor_id: PydanticObjectId):
     """Retorna um autor pelo ID."""
-    autor = session.get(Autor, autor_id)
+    autor = await Autor.get(autor_id)
     if not autor:
         raise HTTPException(status_code=404, detail="Autor não encontrado")
     return autor
 
 @router.put("/{autor_id}", response_model=Autor)
-def update_autor(autor_id: int, autor: Autor, session: Session = Depends(get_session)):
+async def update_autor(autor_id: PydanticObjectId, autor_data: AutorUpdate):
     """Atualiza os dados de um autor pelo ID."""
-    db_autor = session.get(Autor, autor_id)
-    if not db_autor:
-        raise HTTPException(status_code=404, detail="Autor não encontrado")
-    for key, value in autor.model_dump(exclude_unset=True).items():
-        setattr(db_autor, key, value)
-    session.add(db_autor)
-    session.commit()
-    session.refresh(db_autor)
-    return db_autor
-
-@router.delete("/{autor_id}")
-def delete_autor(autor_id: int, session: Session = Depends(get_session)):
-    """Deleta um autor pelo ID."""
-    autor = session.get(Autor, autor_id)
+    autor = await Autor.get(autor_id)
     if not autor:
         raise HTTPException(status_code=404, detail="Autor não encontrado")
-    session.delete(autor)
-    session.commit()
+    
+    await autor.set(autor_data.model_dump(exclude_unset=True))
+    return autor
+
+@router.delete("/{autor_id}")
+async def delete_autor(autor_id: PydanticObjectId):
+    """Deleta um autor pelo ID."""
+    autor = await Autor.get(autor_id)
+    if not autor:
+        raise HTTPException(status_code=404, detail="Autor não encontrado")
+    
+    await autor.delete()
     return {"detail": "Autor deletado com sucesso"}
 
 
 # Relacionamento com livros
 
 @router.post("/{autor_id}/livros/{livro_id}")
-def add_livro_to_autor(autor_id: int, livro_id: int, session: Session = Depends(get_session)):
+async def add_livro_to_autor(autor_id: PydanticObjectId, livro_id: PydanticObjectId):
     """Vincula um livro a um autor."""
-    autor = session.get(Autor, autor_id)
+    autor = await Autor.get(autor_id)
     if not autor:
         raise HTTPException(status_code=404, detail="Autor não encontrado")
     
-    livro = session.get(Livro, livro_id)
+    livro = await Livro.get(livro_id)
     if not livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado")
     
-    existente = session.get(LivroAutorLink, (livro_id, autor_id))
-    if existente:
-        raise HTTPException(status_code=400, detail="Livro já está vinculado a este autor")
+    if autor.livros is None:
+        autor.livros = []
     
-    link = LivroAutorLink(livro_id=livro_id, autor_id=autor_id)
-    session.add(link)
-    session.commit()
+    for link in autor.livros:
+        if link.ref.id == livro.id:
+            raise HTTPException(status_code=400, detail="Livro já está vinculado a este autor")
+        
+    autor.livros.append(livro)
+    await autor.save()
+    
+    if livro.autores is None:
+        livro.autores = []
+
+    ja_vinculado = any(link.ref.id == autor.id for link in livro.autores)
+    if not ja_vinculado:
+        livro.autores.append(autor)
+        await livro.save()
+
     return {"detail": "Livro adicionado ao autor com sucesso"}
 
-@router.get("/{autor_id}/livros", response_model=list[Livro])
-def get_livros_by_autor(
-    autor_id: int,
-    offset: int = 0,
-    limit: int = Query(default=10, le=100),
-    session: Session = Depends(get_session)
-):
+@router.get("/{autor_id}/livros", response_model=Page[Livro])
+async def get_livros_by_autor(autor_id: PydanticObjectId):
     """Retorna os livros associados a um autor específico."""
-    autor = session.get(Autor, autor_id)
+    autor = await Autor.get(autor_id)
     if not autor:
         raise HTTPException(status_code=404, detail="Autor não encontrado")
 
-    statement = (
-        select(Livro)
-        .join(LivroAutorLink)
-        .where(LivroAutorLink.autor_id == autor_id)
-        .offset(offset)
-        .limit(limit)
-    )
-    livros = session.exec(statement).all()
-    return livros
+    query = Livro.find(Livro.autores.id == autor_id)
+    
+    return await apaginate(query)
 
 @router.delete("/{autor_id}/livros/{livro_id}")
-def remove_livro_from_autor(autor_id: int, livro_id: int, session: Session = Depends(get_session)):
+async def remove_livro_from_autor(autor_id: PydanticObjectId, livro_id: PydanticObjectId):
     """Remove o vínculo entre um livro e um autor."""
-    link = session.get(LivroAutorLink, (livro_id, autor_id))
-    if not link:
-        raise HTTPException(status_code=404, detail="Vínculo entre livro e autor não encontrado")
-    session.delete(link)
-    session.commit()
+    autor = await Autor.get(autor_id)
+    if not autor:
+        raise HTTPException(status_code=404, detail="Autor não encontrado")
+        
+    livro = await Livro.get(livro_id)
+    if not livro:
+        raise HTTPException(status_code=404, detail="Livro não encontrado")
+
+    # Remove do autor
+    if autor.livros:
+        original_count = len(autor.livros)
+        autor.livros = [link for link in autor.livros if link.ref.id != livro.id]
+        
+        if len(autor.livros) == original_count:
+             raise HTTPException(status_code=404, detail="Vínculo entre livro e autor não encontrado")
+             
+        await autor.save()
+        
+    if livro.autores:
+        livro.autores = [link for link in livro.autores if link.ref.id != autor.id]
+        await livro.save()
+
     return {"detail": "Livro removido do autor com sucesso"}
