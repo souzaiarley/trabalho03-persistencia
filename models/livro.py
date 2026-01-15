@@ -1,27 +1,18 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import TYPE_CHECKING
-from .livro_autor_link import LivroAutorLink
+from beanie import Document, Link
+from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .emprestimo import Emprestimo
     from .autor import Autor
+    from .emprestimo import Emprestimo
 
-class LivroBase(SQLModel):
-    id: int | None = Field(default=None, primary_key=True)
+class Livro(Document):
     titulo: str
     ano: int
-    isbn: str = Field(unique=True)
-    categoria: str
+    isbn: str
+    categoria: Optional[str]
 
-class Livro(LivroBase, table=True):
-    """Modelo de livro da biblioteca"""
-    emprestimos: list['Emprestimo'] = Relationship(back_populates='livro')
-    autores: list['Autor'] = Relationship(
-        back_populates='livros',
-        link_model=LivroAutorLink
-    )
+    emprestimos: Optional[List[Link["Emprestimo"]]] = []
+    autores: Optional[List[Link["Autor"]]] = []
 
-class LivroComEstatisticas(LivroBase):
-    """Livro com estatísticas de empréstimos"""
-    total_emprestimos: int
-    emprestimos_ativos: int
+    class Settings:
+        name = "livros"

@@ -1,15 +1,24 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from .emprestimo import Emprestimo
+from beanie import Document
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 
-class AlunoBase(SQLModel):
-    id: int | None = Field(default=None, primary_key=True)
+class AlunoCreate(BaseModel):
     nome: str
-    matricula: str = Field(unique=True)
+    matricula: str
     curso: str
-    email: str = Field(unique=True)
+    email: EmailStr
 
-class Aluno(AlunoBase, table=True):
-    """Modelo de aluno da biblioteca"""
-    emprestimos: list['Emprestimo'] = Relationship(back_populates='aluno')
+class AlunoUpdate(BaseModel):
+    nome: Optional[str] = None
+    matricula: Optional[str] = None
+    curso: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+class Aluno(Document):
+    nome: str
+    matricula: str
+    curso: str
+    email: EmailStr
+
+    class Settings:
+        name = "alunos"

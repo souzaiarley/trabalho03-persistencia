@@ -1,20 +1,15 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import TYPE_CHECKING
-
-from .livro_autor_link import LivroAutorLink
+from beanie import Document, Link
+from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .livro import Livro
 
-class AutorBase(SQLModel):
-    id: int | None = Field(default=None, primary_key=True)
+class Autor(Document):
     nome: str
-    nacionalidade: str
-    ano_nascimento: int
+    nacionalidade: Optional[str]
+    ano_nascimento: Optional[int]
 
-class Autor(AutorBase, table=True):
-    """Modelo de autor de livros"""
-    livros: list['Livro'] = Relationship(
-        back_populates='autores',
-        link_model=LivroAutorLink
-    )
+    livros: Optional[List[Link["Livro"]]] = []
+
+    class Settings:
+        name = "autores"
