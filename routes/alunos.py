@@ -11,15 +11,18 @@ router = APIRouter(
 
 @router.post("/", response_model=Aluno)
 async def create_aluno(aluno: AlunoCreate):
+    """Cria um novo aluno."""
     await aluno.insert()
     return aluno
 
 @router.get("/", response_model=Page[Aluno])
 async def read_alunos():
+    """Retorna uma lista de alunos com paginação."""
     return await apaginate(Aluno)
 
 @router.get("/{aluno_id}", response_model=Aluno)
 async def read_aluno(aluno_id: PydanticObjectId):
+    """Retorna um aluno pelo ID."""
     aluno = await Aluno.get(aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
@@ -27,6 +30,7 @@ async def read_aluno(aluno_id: PydanticObjectId):
 
 @router.put("/{aluno_id}", response_model=Aluno)
 async def update_aluno(aluno_id: PydanticObjectId, aluno_data: AlunoUpdate):
+    """Atualiza os dados de um aluno pelo ID."""
     aluno = await Aluno.get(aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
@@ -36,6 +40,7 @@ async def update_aluno(aluno_id: PydanticObjectId, aluno_data: AlunoUpdate):
 
 @router.delete("/{aluno_id}")
 async def delete_aluno(aluno_id: PydanticObjectId):
+    """Deleta um aluno pelo ID."""
     aluno = await Aluno.get(aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
@@ -48,6 +53,7 @@ async def delete_aluno(aluno_id: PydanticObjectId):
 
 @router.get("/{aluno_id}/emprestimos", response_model=Page[EmprestimoWithLivroOut])
 async def get_emprestimos_aluno(aluno_id: PydanticObjectId):
+    """Retorna os empréstimos de um aluno específico com paginação."""
     aluno = await Aluno.get(aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
