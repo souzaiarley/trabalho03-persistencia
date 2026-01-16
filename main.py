@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from routes import home, alunos, autores
+from routes import home, alunos, autores, estatisticas
 #from routes import autores, livros, emprestimos, estatisticas
 from database import init_db, close_db
 from fastapi_pagination import add_pagination
@@ -18,5 +18,5 @@ app.include_router(alunos.router)
 app.include_router(autores.router)
 # app.include_router(livros.router)
 # app.include_router(emprestimos.router)
-# app.include_router(estatisticas.router)
+app.include_router(estatisticas.router)
 add_pagination(app)
