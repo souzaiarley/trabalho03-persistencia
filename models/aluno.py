@@ -22,3 +22,14 @@ class Aluno(Document):
 
     class Settings:
         name = "alunos"
+
+class AlunoOut(BaseModel):
+    id: str
+    nome: str
+    matricula: str
+    curso: str
+    email: EmailStr
+
+    model_config = {
+        "from_attributes": True
+    }
