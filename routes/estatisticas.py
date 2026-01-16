@@ -1,18 +1,15 @@
-from fastapi import APIRouter, Depends
-from sqlmodel import Session, select, func
+from fastapi import APIRouter
 from pydantic import BaseModel
+from datetime import date
 from models.aluno import Aluno
 from models.autor import Autor
 from models.livro import Livro
 from models.emprestimo import Emprestimo
-from database import get_session
-from datetime import date
 
 router = APIRouter(
     prefix="/estatisticas",
     tags=["estatisticas"]
 )
-
 
 class EstatisticasGerais(BaseModel):
     """Modelo para estatísticas gerais do sistema"""
@@ -26,61 +23,57 @@ class EstatisticasGerais(BaseModel):
     livro_mais_emprestado: str | None
     aluno_mais_ativo: str | None
 
-
 @router.get("/", response_model=EstatisticasGerais)
-def get_estatisticas_gerais(session: Session = Depends(get_session)):
+async def get_estatisticas_gerais():
     """
-    Retorna estatísticas gerais do sistema de biblioteca.
+    Retorna estatísticas gerais do sistema de biblioteca (Versão NoSQL).
     """
-    # Contadores básicos
-    total_alunos = len(session.exec(select(Aluno)).all())
-    total_autores = len(session.exec(select(Autor)).all())
-    total_livros = len(session.exec(select(Livro)).all())
-    total_emprestimos = len(session.exec(select(Emprestimo)).all())
+    total_alunos = await Aluno.count()
+    total_autores = await Autor.count()
+    total_livros = await Livro.count()
+    total_emprestimos = await Emprestimo.count()
 
-    # Empréstimos ativos
-    emprestimos_ativos = len(
-        session.exec(
-            select(Emprestimo).where(Emprestimo.data_devolucao == None)
-        ).all()
-    )
+    emprestimos_ativos = await Emprestimo.find(
+        Emprestimo.data_devolucao == None
+    ).count()
 
-    # Empréstimos finalizados
     emprestimos_finalizados = total_emprestimos - emprestimos_ativos
 
-    # Empréstimos atrasados
     hoje = date.today()
-    emprestimos_atrasados = len(
-        session.exec(
-            select(Emprestimo)
-            .where(
-                (Emprestimo.data_devolucao == None) &
-                (Emprestimo.data_devolucao_prevista < hoje)
-            )
-        ).all()
-    )
+    emprestimos_atrasados = await Emprestimo.find(
+        Emprestimo.data_devolucao == None,
+        Emprestimo.data_devolucao_prevista < hoje
+    ).count()
 
-    # Livro mais emprestado
-    livro_mais_emprestado_query = (
-        select(Livro.titulo, func.count(Emprestimo.id).label('total'))
-        .join(Emprestimo, Livro.id == Emprestimo.livro_id)
-        .group_by(Livro.id)
-        .order_by(func.count(Emprestimo.id).desc())
-        .limit(1)
-    )
-    result = session.exec(livro_mais_emprestado_query).first()
-    livro_mais_emprestado = result[0] if result else None
+    pipeline_livro = [
+        {"$group": {"_id": "$livro.$id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 1}
+    ]
+    
+    top_livro_data = await Emprestimo.aggregate(pipeline_livro).to_list(1)
+    
+    livro_mais_emprestado = None
+    if top_livro_data:
+        livro_id = top_livro_data[0]["_id"]
+        livro = await Livro.get(livro_id)
+        if livro:
+            livro_mais_emprestado = livro.titulo
 
-    # Aluno mais ativo
-    aluno_mais_ativo_query = (
-        select(Aluno.nome, func.count(Emprestimo.id).label('total'))
-        .join(Emprestimo, Aluno.id == Emprestimo.aluno_id)
-        .group_by(Aluno.id)
-        .order_by(func.count(Emprestimo.id).desc())
-        .limit(1)
-    )
-    result = session.exec(aluno_mais_ativo_query).first()
-    aluno_mais_ativo = result[0] if result else None
+    pipeline_aluno = [
+        {"$group": {"_id": "$aluno.$id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 1}
+    ]
+
+    top_aluno_data = await Emprestimo.aggregate(pipeline_aluno).to_list(1)
+
+    aluno_mais_ativo = None
+    if top_aluno_data:
+        aluno_id = top_aluno_data[0]["_id"]
+        aluno = await Aluno.get(aluno_id)
+        if aluno:
+            aluno_mais_ativo = aluno.nome
 
     return EstatisticasGerais(
         total_alunos=total_alunos,
