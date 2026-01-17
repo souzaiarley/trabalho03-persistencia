@@ -1,4 +1,4 @@
-from beanie import Document, Link
+from beanie import Document, Link, PydanticObjectId
 from typing import Optional, List, TYPE_CHECKING
 from pydantic import BaseModel
 
@@ -24,3 +24,13 @@ class Autor(Document):
 
     class Settings:
         name = "autores"
+
+class AutorOut(BaseModel):
+    id: PydanticObjectId
+    nome: str
+    nacionalidade: Optional[str]
+    ano_nascimento: Optional[int]
+
+    model_config = {
+        "from_attributes": True
+    }

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
 from datetime import date
 from typing import List, Optional
-from models.emprestimo import Emprestimo, EmprestimoCreate, EmprestimoUpdate, EmprestimoFull
+from models.emprestimo import Emprestimo, EmprestimoCreate, EmprestimoUpdate, EmprestimoFull, EmprestimoOut
 from models.aluno import Aluno, AlunoOut
 from models.livro import Livro, LivroOut
 
@@ -11,7 +11,7 @@ router = APIRouter(
     tags=["emprestimos"]
 )
 
-@router.post("/", response_model=Emprestimo)
+@router.post("/", response_model=EmprestimoOut)
 async def create_emprestimo(emprestimo_data: EmprestimoCreate):
     """Cria um novo empréstimo."""
     aluno = await Aluno.get(PydanticObjectId(emprestimo_data.aluno_id))
@@ -39,7 +39,15 @@ async def create_emprestimo(emprestimo_data: EmprestimoCreate):
         data_devolucao=emprestimo_data.data_devolucao
     )
     await novo_emprestimo.insert()
-    return novo_emprestimo
+    
+    return EmprestimoOut(
+        id=novo_emprestimo.id,
+        data_emprestimo=novo_emprestimo.data_emprestimo,
+        data_devolucao_prevista=novo_emprestimo.data_devolucao_prevista,
+        data_devolucao=novo_emprestimo.data_devolucao,
+        aluno_id=novo_emprestimo.aluno.id,
+        livro_id=novo_emprestimo.livro.id
+    )
 
 @router.get("/", response_model=List[EmprestimoFull])
 async def read_emprestimos(
@@ -47,7 +55,7 @@ async def read_emprestimos(
     limit: int = Query(default=10, le=100)
 ):
     """Retorna uma lista de todos os empréstimos."""
-    emprestimos = await Emprestimo.find_all().skip(offset).limit(limit).fetch_links().to_list()
+    emprestimos = await Emprestimo.find_all(fetch_links=True).skip(offset).limit(limit).to_list()
     
     return [
         EmprestimoFull(
@@ -101,7 +109,7 @@ async def read_emprestimo(emprestimo_id: PydanticObjectId):
         )
     )
 
-@router.put("/{emprestimo_id}", response_model=Emprestimo)
+@router.put("/{emprestimo_id}", response_model=EmprestimoOut)
 async def update_emprestimo(emprestimo_id: PydanticObjectId, emprestimo_data: EmprestimoUpdate):
     """Atualiza os dados de um empréstimo pelo ID."""
     db_emprestimo = await Emprestimo.get(emprestimo_id, fetch_links=True)
@@ -143,7 +151,14 @@ async def update_emprestimo(emprestimo_id: PydanticObjectId, emprestimo_data: Em
     else:
         await db_emprestimo.save()
         
-    return db_emprestimo
+    return EmprestimoOut(
+        id=db_emprestimo.id,
+        data_emprestimo=db_emprestimo.data_emprestimo,
+        data_devolucao_prevista=db_emprestimo.data_devolucao_prevista,
+        data_devolucao=db_emprestimo.data_devolucao,
+        aluno_id=db_emprestimo.aluno.id,
+        livro_id=db_emprestimo.livro.id
+    )
 
 @router.delete("/{emprestimo_id}")
 async def delete_emprestimo(emprestimo_id: PydanticObjectId):
@@ -167,8 +182,9 @@ async def get_emprestimos_atrasados(
     hoje = date.today()
     emprestimos = await Emprestimo.find(
         Emprestimo.data_devolucao == None,
-        Emprestimo.data_devolucao_prevista < hoje
-    ).skip(offset).limit(limit).fetch_links().to_list()
+        Emprestimo.data_devolucao_prevista < hoje,
+        fetch_links=True
+    ).skip(offset).limit(limit).to_list()
 
     return [
         EmprestimoFull(
@@ -202,8 +218,9 @@ async def get_emprestimos_ativos(
 ):
     """Retorna todos os empréstimos ativos (ainda não devolvidos)."""
     emprestimos = await Emprestimo.find(
-        Emprestimo.data_devolucao == None
-    ).skip(offset).limit(limit).fetch_links().to_list()
+        Emprestimo.data_devolucao == None,
+        fetch_links=True
+    ).skip(offset).limit(limit).to_list()
 
     return [
         EmprestimoFull(

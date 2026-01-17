@@ -27,5 +27,5 @@ async def init_db():
 async def close_db():
     global _client
     if _client is not None:
-        _client.close()
+        await _client.close()
         _client = None

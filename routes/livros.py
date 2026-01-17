@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
 from typing import List, Optional
 from models.livro import Livro, LivroCreate, LivroUpdate, LivroOut, LivroComEstatisticas
-from models.autor import Autor
+from models.autor import Autor, AutorOut
 from models.emprestimo import Emprestimo, EmprestimoFull, EmprestimoWithLivroOut
 from models.aluno import AlunoOut
 
@@ -84,7 +84,7 @@ async def add_autor_to_livro(livro_id: PydanticObjectId, autor_id: PydanticObjec
     
     return {"detail": "Autor adicionado ao livro com sucesso"}
 
-@router.get("/{livro_id}/autores", response_model=List[Autor])
+@router.get("/{livro_id}/autores", response_model=List[AutorOut])
 async def get_autores_of_livro(livro_id: PydanticObjectId):
     """Retorna os autores associados a um livro."""
     livro = await Livro.get(livro_id, fetch_links=True)
@@ -128,8 +128,9 @@ async def get_emprestimos_of_livro(
         raise HTTPException(status_code=404, detail="Livro não encontrado")
 
     emprestimos = await Emprestimo.find(
-        Emprestimo.livro.id == livro_id
-    ).skip(offset).limit(limit).fetch_links().to_list()
+        Emprestimo.livro.id == livro_id,
+        fetch_links=True
+    ).skip(offset).limit(limit).to_list()
 
     return [
         EmprestimoFull(

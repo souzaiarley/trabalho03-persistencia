@@ -64,8 +64,9 @@ async def get_emprestimos_aluno(
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
     emprestimos = await Emprestimo.find(
-        Emprestimo.aluno.id == aluno_id
-    ).skip(offset).limit(limit).fetch_links().to_list()
+        Emprestimo.aluno.id == aluno_id,
+        fetch_links=True
+    ).skip(offset).limit(limit).to_list()
 
     return [
         EmprestimoWithLivroOut(
