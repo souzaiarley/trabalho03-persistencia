@@ -1,7 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from beanie import PydanticObjectId, Link
-from fastapi_pagination import Page
-from fastapi_pagination.ext.beanie import apaginate
+from beanie import PydanticObjectId
 from typing import List, Optional
 from models.livro import Livro, LivroCreate, LivroUpdate, LivroOut, LivroComEstatisticas
 from models.autor import Autor
@@ -13,19 +11,20 @@ router = APIRouter(
     tags=["livros"]
 )
 
-@router.post("/", response_model=Livro)
+@router.post("/", response_model=LivroOut)
 async def create_livro(livro_data: LivroCreate):
     """Cria um novo livro."""
     livro = Livro(**livro_data.model_dump())
     await livro.insert()
     return livro
 
-@router.get("/", response_model=Page[Livro])
-async def read_livros():
+@router.get("/", response_model=List[LivroOut])
+async def read_livros(offset: int = 0, limit: int = Query(default=10, le=100)):
     """Retorna uma lista de livros com paginação."""
-    return await apaginate(Livro)
+    livros = await Livro.find_all().skip(offset).limit(limit).to_list()
+    return livros
 
-@router.get("/{livro_id}", response_model=Livro)
+@router.get("/{livro_id}", response_model=LivroOut)
 async def read_livro(livro_id: PydanticObjectId):
     """Retorna um livro pelo ID."""
     livro = await Livro.get(livro_id)
@@ -33,7 +32,7 @@ async def read_livro(livro_id: PydanticObjectId):
         raise HTTPException(status_code=404, detail="Livro não encontrado")
     return livro
 
-@router.put("/{livro_id}", response_model=Livro)
+@router.put("/{livro_id}", response_model=LivroOut)
 async def update_livro(livro_id: PydanticObjectId, livro_data: LivroUpdate):
     """Atualiza os dados de um livro pelo ID."""
     livro = await Livro.get(livro_id)
@@ -117,17 +116,23 @@ async def remove_autor_from_livro(livro_id: PydanticObjectId, autor_id: Pydantic
 
 # Relacionamento com emprestimos
 
-@router.get("/{livro_id}/emprestimos", response_model=Page[EmprestimoFull])
-async def get_emprestimos_of_livro(livro_id: PydanticObjectId):  
+@router.get("/{livro_id}/emprestimos", response_model=List[EmprestimoFull])
+async def get_emprestimos_of_livro(
+    livro_id: PydanticObjectId,
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
+):  
     """Retorna os empréstimos de um livro."""
     livro = await Livro.get(livro_id)
     if not livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado")
 
-    query = Emprestimo.find(Emprestimo.livro.id == livro_id).fetch_links()
+    emprestimos = await Emprestimo.find(
+        Emprestimo.livro.id == livro_id
+    ).skip(offset).limit(limit).fetch_links().to_list()
 
-    async def transform(emp):
-        return EmprestimoFull(
+    return [
+        EmprestimoFull(
             id=str(emp.id),
             data_emprestimo=emp.data_emprestimo,
             data_devolucao_prevista=emp.data_devolucao_prevista,
@@ -147,24 +152,47 @@ async def get_emprestimos_of_livro(livro_id: PydanticObjectId):
                 categoria=emp.livro.categoria
             )
         )
-
-    return await apaginate(query, transform=transform)
+        for emp in emprestimos
+    ]
 
 
 # Consultas complexas
 
-@router.get("/buscar/query", response_model=Page[Livro])
+@router.get("/buscar/query", response_model=List[LivroOut])
 async def buscar_livros(
-    q: str = Query(..., description="Termo de busca (título ou categoria)")
+    q: str = Query(..., description="Termo de busca (título, categoria ou autor)"),
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
 ):
-    """Busca livros por título ou categoria."""
-    query = Livro.find({
+    """Busca livros por título, categoria ou nome do autor."""
+    # Busca por título ou categoria no livro
+    query_livros = Livro.find({
         "$or": [
             {"titulo": {"$regex": q, "$options": "i"}},
             {"categoria": {"$regex": q, "$options": "i"}}
         ]
     })
-    return await apaginate(query)
+    livros_titulo_categoria = await query_livros.to_list()
+
+    # Busca por autor
+    autores_matching = await Autor.find({"nome": {"$regex": q, "$options": "i"}}).to_list()
+    autor_ids = [a.id for a in autores_matching]
+    
+    livros_autor = []
+    if autor_ids:
+        livros_autor = await Livro.find({
+            "autores.id": {"$in": autor_ids}
+        }).to_list()
+
+    # Combinar resultados e remover duplicatas
+    seen_ids = set()
+    livros_res = []
+    for livro in livros_titulo_categoria + livros_autor:
+        if str(livro.id) not in seen_ids:
+            livros_res.append(livro)
+            seen_ids.add(str(livro.id))
+            
+    return livros_res[offset : offset + limit]
 
 
 @router.get("/mais-emprestados/ranking", response_model=List[LivroComEstatisticas])
@@ -195,6 +223,7 @@ async def get_livros_mais_emprestados(
     
     livros_com_stats = []
     for stat in stats:
+        if stat["_id"] is None: continue # Skip if book is not linked correctly
         livro = await Livro.get(stat["_id"])
         if livro:
             livro_dict = livro.model_dump()
@@ -206,10 +235,14 @@ async def get_livros_mais_emprestados(
     return livros_com_stats
 
 
-@router.get("/por-categoria/filtrar", response_model=Page[Livro])
+@router.get("/por-categoria/filtrar", response_model=List[LivroOut])
 async def get_livros_por_categoria(
-    categoria: str = Query(..., description="Nome da categoria")
+    categoria: str = Query(..., description="Nome da categoria"),
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
 ):
     """Filtra livros por categoria."""
-    query = Livro.find({"categoria": {"$regex": categoria, "$options": "i"}})
-    return await apaginate(query)
+    livros = await Livro.find(
+        {"categoria": {"$regex": categoria, "$options": "i"}}
+    ).skip(offset).limit(limit).to_list()
+    return livros
