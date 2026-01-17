@@ -1,28 +1,28 @@
 from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
 from typing import List
-from models.autor import Autor, AutorCreate, AutorUpdate
-from models.livro import Livro
+from models.autor import Autor, AutorCreate, AutorUpdate, AutorOut
+from models.livro import Livro, LivroOut
 
 router = APIRouter(
     prefix="/autores",
     tags=["autores"]
 )
 
-@router.post("/", response_model=Autor)
+@router.post("/", response_model=AutorOut)
 async def create_autor(autor_data: AutorCreate):
     """Cria um novo autor."""
     autor = Autor(**autor_data.model_dump())
     await autor.insert()
     return autor
 
-@router.get("/", response_model=List[Autor])
+@router.get("/", response_model=List[AutorOut])
 async def read_autores(offset: int = 0, limit: int = Query(default=10, le=100)):
     """Retorna uma lista de autores com paginação."""
     autores = await Autor.find_all().skip(offset).limit(limit).to_list()
     return autores
 
-@router.get("/{autor_id}", response_model=Autor)
+@router.get("/{autor_id}", response_model=AutorOut)
 async def read_autor(autor_id: PydanticObjectId):
     """Retorna um autor pelo ID."""
     autor = await Autor.get(autor_id)
@@ -30,7 +30,7 @@ async def read_autor(autor_id: PydanticObjectId):
         raise HTTPException(status_code=404, detail="Autor não encontrado")
     return autor
 
-@router.put("/{autor_id}", response_model=Autor)
+@router.put("/{autor_id}", response_model=AutorOut)
 async def update_autor(autor_id: PydanticObjectId, autor_data: AutorUpdate):
     """Atualiza os dados de um autor pelo ID."""
     autor = await Autor.get(autor_id)
@@ -84,7 +84,7 @@ async def add_livro_to_autor(autor_id: PydanticObjectId, livro_id: PydanticObjec
 
     return {"detail": "Livro adicionado ao autor com sucesso"}
 
-@router.get("/{autor_id}/livros", response_model=List[Livro])
+@router.get("/{autor_id}/livros", response_model=List[LivroOut])
 async def get_livros_by_autor(
     autor_id: PydanticObjectId,
     offset: int = 0,

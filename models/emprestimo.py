@@ -32,6 +32,18 @@ class Emprestimo(Document):
     class Settings:
         name = "emprestimos"
 
+class EmprestimoOut(BaseModel):
+    id: PydanticObjectId
+    data_emprestimo: date
+    data_devolucao_prevista: date
+    data_devolucao: Optional[date]
+    aluno_id: PydanticObjectId
+    livro_id: PydanticObjectId
+
+    model_config = {
+        "from_attributes": True
+    }
+
 class EmprestimoWithLivroOut(BaseModel):
     id: str
     data_emprestimo: date
