@@ -1,7 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
-from fastapi_pagination import Page
-from fastapi_pagination.ext.beanie import apaginate
 from typing import List
 from models.autor import Autor, AutorCreate, AutorUpdate
 from models.livro import Livro
@@ -18,10 +16,11 @@ async def create_autor(autor_data: AutorCreate):
     await autor.insert()
     return autor
 
-@router.get("/", response_model=Page[Autor])
-async def read_autores():
+@router.get("/", response_model=List[Autor])
+async def read_autores(offset: int = 0, limit: int = Query(default=10, le=100)):
     """Retorna uma lista de autores com paginação."""
-    return await apaginate(Autor)
+    autores = await Autor.find_all().skip(offset).limit(limit).to_list()
+    return autores
 
 @router.get("/{autor_id}", response_model=Autor)
 async def read_autor(autor_id: PydanticObjectId):
@@ -85,16 +84,20 @@ async def add_livro_to_autor(autor_id: PydanticObjectId, livro_id: PydanticObjec
 
     return {"detail": "Livro adicionado ao autor com sucesso"}
 
-@router.get("/{autor_id}/livros", response_model=Page[Livro])
-async def get_livros_by_autor(autor_id: PydanticObjectId):
+@router.get("/{autor_id}/livros", response_model=List[Livro])
+async def get_livros_by_autor(
+    autor_id: PydanticObjectId,
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
+):
     """Retorna os livros associados a um autor específico."""
     autor = await Autor.get(autor_id)
     if not autor:
         raise HTTPException(status_code=404, detail="Autor não encontrado")
 
-    query = Livro.find(Livro.autores.id == autor_id)
+    livros = await Livro.find(Livro.autores.id == autor_id).skip(offset).limit(limit).to_list()
     
-    return await apaginate(query)
+    return livros
 
 @router.delete("/{autor_id}/livros/{livro_id}")
 async def remove_livro_from_autor(autor_id: PydanticObjectId, livro_id: PydanticObjectId):

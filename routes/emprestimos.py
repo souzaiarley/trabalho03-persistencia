@@ -1,7 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
-from fastapi_pagination import Page
-from fastapi_pagination.ext.beanie import apaginate
 from datetime import date
 from typing import List, Optional
 from models.emprestimo import Emprestimo, EmprestimoCreate, EmprestimoUpdate, EmprestimoFull
@@ -43,13 +41,37 @@ async def create_emprestimo(emprestimo_data: EmprestimoCreate):
     await novo_emprestimo.insert()
     return novo_emprestimo
 
-@router.get("/", response_model=Page[EmprestimoFull])
-async def read_emprestimos():
+@router.get("/", response_model=List[EmprestimoFull])
+async def read_emprestimos(
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
+):
     """Retorna uma lista de todos os empréstimos."""
-    return await apaginate(
-        Emprestimo.find_all(),
-        fetch_links=True
-    )
+    emprestimos = await Emprestimo.find_all().skip(offset).limit(limit).fetch_links().to_list()
+    
+    return [
+        EmprestimoFull(
+            id=emp.id,
+            data_emprestimo=emp.data_emprestimo,
+            data_devolucao_prevista=emp.data_devolucao_prevista,
+            data_devolucao=emp.data_devolucao,
+            aluno=AlunoOut(
+                id=str(emp.aluno.id),
+                nome=emp.aluno.nome,
+                matricula=emp.aluno.matricula,
+                curso=emp.aluno.curso,
+                email=emp.aluno.email
+            ),
+            livro=LivroOut(
+                id=str(emp.livro.id),
+                titulo=emp.livro.titulo,
+                ano=emp.livro.ano,
+                isbn=emp.livro.isbn,
+                categoria=emp.livro.categoria
+            )
+        )
+        for emp in emprestimos
+    ]
 
 @router.get("/{emprestimo_id}", response_model=EmprestimoFull)
 async def read_emprestimo(emprestimo_id: PydanticObjectId):
@@ -136,17 +158,20 @@ async def delete_emprestimo(emprestimo_id: PydanticObjectId):
 
 # Consultas complexas
 
-@router.get("/atrasados/listar", response_model=Page[EmprestimoFull])
-async def get_emprestimos_atrasados():
+@router.get("/atrasados/listar", response_model=List[EmprestimoFull])
+async def get_emprestimos_atrasados(
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
+):
     """Retorna todos os empréstimos atrasados (data_devolucao_prevista < hoje e ainda não devolvidos)."""
     hoje = date.today()
-    query = Emprestimo.find(
+    emprestimos = await Emprestimo.find(
         Emprestimo.data_devolucao == None,
         Emprestimo.data_devolucao_prevista < hoje
-    ).fetch_links()
+    ).skip(offset).limit(limit).fetch_links().to_list()
 
-    async def transform(emp):
-        return EmprestimoFull(
+    return [
+        EmprestimoFull(
             id=str(emp.id),
             data_emprestimo=emp.data_emprestimo,
             data_devolucao_prevista=emp.data_devolucao_prevista,
@@ -166,17 +191,22 @@ async def get_emprestimos_atrasados():
                 categoria=emp.livro.categoria
             )
         )
+        for emp in emprestimos
+    ]
 
-    return await apaginate(query, transform=transform)
 
-
-@router.get("/ativos/listar", response_model=Page[EmprestimoFull])
-async def get_emprestimos_ativos():
+@router.get("/ativos/listar", response_model=List[EmprestimoFull])
+async def get_emprestimos_ativos(
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
+):
     """Retorna todos os empréstimos ativos (ainda não devolvidos)."""
-    query = Emprestimo.find(Emprestimo.data_devolucao == None).fetch_links()
+    emprestimos = await Emprestimo.find(
+        Emprestimo.data_devolucao == None
+    ).skip(offset).limit(limit).fetch_links().to_list()
 
-    async def transform(emp):
-        return EmprestimoFull(
+    return [
+        EmprestimoFull(
             id=str(emp.id),
             data_emprestimo=emp.data_emprestimo,
             data_devolucao_prevista=emp.data_devolucao_prevista,
@@ -196,5 +226,5 @@ async def get_emprestimos_ativos():
                 categoria=emp.livro.categoria
             )
         )
-
-    return await apaginate(query, transform=transform)
+        for emp in emprestimos
+    ]

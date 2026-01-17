@@ -1,27 +1,27 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
-from fastapi_pagination import Page
-from fastapi_pagination.ext.beanie import apaginate
-from models import Aluno, AlunoCreate, AlunoUpdate, Emprestimo, EmprestimoWithLivroOut, LivroOut
+from typing import List
+from models import Aluno, AlunoCreate, AlunoUpdate, Emprestimo, EmprestimoWithLivroOut, LivroOut, AlunoOut
 
 router = APIRouter(
     prefix="/alunos",
     tags=["alunos"]
 )
 
-@router.post("/", response_model=Aluno)
+@router.post("/", response_model=AlunoOut)
 async def create_aluno(aluno: AlunoCreate):
     """Cria um novo aluno."""
     aluno_db = Aluno(**aluno.model_dump())
     await aluno_db.insert()
     return aluno_db
 
-@router.get("/", response_model=Page[Aluno])
-async def read_alunos():
+@router.get("/", response_model=List[AlunoOut])
+async def read_alunos(offset: int = 0, limit: int = Query(default=10, le=100)):
     """Retorna uma lista de alunos com paginação."""
-    return await apaginate(Aluno)
+    alunos = await Aluno.find_all().skip(offset).limit(limit).to_list()
+    return alunos
 
-@router.get("/{aluno_id}", response_model=Aluno)
+@router.get("/{aluno_id}", response_model=AlunoOut)
 async def read_aluno(aluno_id: PydanticObjectId):
     """Retorna um aluno pelo ID."""
     aluno = await Aluno.get(aluno_id)
@@ -29,7 +29,7 @@ async def read_aluno(aluno_id: PydanticObjectId):
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
     return aluno
 
-@router.put("/{aluno_id}", response_model=Aluno)
+@router.put("/{aluno_id}", response_model=AlunoOut)
 async def update_aluno(aluno_id: PydanticObjectId, aluno_data: AlunoUpdate):
     """Atualiza os dados de um aluno pelo ID."""
     aluno = await Aluno.get(aluno_id)
@@ -52,28 +52,34 @@ async def delete_aluno(aluno_id: PydanticObjectId):
 
 # Relacionamento com emprestimos
 
-@router.get("/{aluno_id}/emprestimos", response_model=Page[EmprestimoWithLivroOut])
-async def get_emprestimos_aluno(aluno_id: PydanticObjectId):
+@router.get("/{aluno_id}/emprestimos", response_model=List[EmprestimoWithLivroOut])
+async def get_emprestimos_aluno(
+    aluno_id: PydanticObjectId,
+    offset: int = 0,
+    limit: int = Query(default=10, le=100)
+):
     """Retorna os empréstimos de um aluno específico com paginação."""
     aluno = await Aluno.get(aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
 
-    query = Emprestimo.find(Emprestimo.aluno.id == aluno_id).fetch_links()
+    emprestimos = await Emprestimo.find(
+        Emprestimo.aluno.id == aluno_id
+    ).skip(offset).limit(limit).fetch_links().to_list()
 
-    async def transform(emprestimo):
-        return EmprestimoWithLivroOut(
-            id=str(emprestimo.id),
-            data_emprestimo=emprestimo.data_emprestimo,
-            data_devolucao_prevista=emprestimo.data_devolucao_prevista,
-            data_devolucao=emprestimo.data_devolucao,
+    return [
+        EmprestimoWithLivroOut(
+            id=str(emp.id),
+            data_emprestimo=emp.data_emprestimo,
+            data_devolucao_prevista=emp.data_devolucao_prevista,
+            data_devolucao=emp.data_devolucao,
             livro=LivroOut(
-                id=str(emprestimo.livro.id),
-                titulo=emprestimo.livro.titulo,
-                ano=emprestimo.livro.ano,
-                isbn=emprestimo.livro.isbn,
-                categoria=emprestimo.livro.categoria
+                id=str(emp.livro.id),
+                titulo=emp.livro.titulo,
+                ano=emp.livro.ano,
+                isbn=emp.livro.isbn,
+                categoria=emp.livro.categoria
             )
         )
-    
-    return await apaginate(query, transform=transform)
+        for emp in emprestimos
+    ]
