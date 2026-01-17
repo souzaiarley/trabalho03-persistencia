@@ -12,8 +12,9 @@ router = APIRouter(
 @router.post("/", response_model=Aluno)
 async def create_aluno(aluno: AlunoCreate):
     """Cria um novo aluno."""
-    await aluno.insert()
-    return aluno
+    aluno_db = Aluno(**aluno.model_dump())
+    await aluno_db.insert()
+    return aluno_db
 
 @router.get("/", response_model=Page[Aluno])
 async def read_alunos():
