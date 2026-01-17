@@ -1,4 +1,4 @@
-from beanie import Document, Link
+from beanie import Document, Link, PydanticObjectId
 from pydantic import BaseModel
 from datetime import date
 from typing import Optional, TYPE_CHECKING
@@ -44,7 +44,7 @@ class EmprestimoWithLivroOut(BaseModel):
     }
 
 class EmprestimoFull(BaseModel):
-    id: str
+    id: PydanticObjectId
     data_emprestimo: date
     data_devolucao_prevista: date
     data_devolucao: Optional[date]

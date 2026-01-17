@@ -46,31 +46,10 @@ async def create_emprestimo(emprestimo_data: EmprestimoCreate):
 @router.get("/", response_model=Page[EmprestimoFull])
 async def read_emprestimos():
     """Retorna uma lista de todos os empréstimos."""
-    query = Emprestimo.find_all().fetch_links()
-
-    async def transform(emp):
-        return EmprestimoFull(
-            id=str(emp.id),
-            data_emprestimo=emp.data_emprestimo,
-            data_devolucao_prevista=emp.data_devolucao_prevista,
-            data_devolucao=emp.data_devolucao,
-            aluno=AlunoOut(
-                id=str(emp.aluno.id),
-                nome=emp.aluno.nome,
-                matricula=emp.aluno.matricula,
-                curso=emp.aluno.curso,
-                email=emp.aluno.email
-            ),
-            livro=LivroOut(
-                id=str(emp.livro.id),
-                titulo=emp.livro.titulo,
-                ano=emp.livro.ano,
-                isbn=emp.livro.isbn,
-                categoria=emp.livro.categoria
-            )
-        )
-
-    return await apaginate(query, transform=transform)
+    return await apaginate(
+        Emprestimo.find_all(),
+        fetch_links=True
+    )
 
 @router.get("/{emprestimo_id}", response_model=EmprestimoFull)
 async def read_emprestimo(emprestimo_id: PydanticObjectId):

@@ -1,4 +1,4 @@
-from beanie import Document, Link
+from beanie import Document, Link, PydanticObjectId
 from pydantic import BaseModel
 from typing import List, Optional, TYPE_CHECKING
 
@@ -31,7 +31,7 @@ class Livro(Document):
         name = "livros"
 
 class LivroOut(BaseModel):
-    id: str
+    id: PydanticObjectId
     titulo: str
     ano: int
     isbn: str

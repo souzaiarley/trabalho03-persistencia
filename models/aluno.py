@@ -1,4 +1,4 @@
-from beanie import Document
+from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
@@ -24,7 +24,7 @@ class Aluno(Document):
         name = "alunos"
 
 class AlunoOut(BaseModel):
-    id: str
+    id: PydanticObjectId
     nome: str
     matricula: str
     curso: str
