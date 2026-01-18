@@ -1,6 +1,0 @@
-Emprestimo query type: <class 'beanie.odm.queries.find.FindMany'>
-Emprestimo has fetch_links: True
-Emprestimo fetch_links type: <class 'bool'>
-Livro query type: <class 'beanie.odm.queries.find.FindMany'>
-Livro has fetch_links: True
-Livro fetch_links type: <class 'bool'>
