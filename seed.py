@@ -1,47 +1,43 @@
-"""
-Script de seed para popular o banco de dados com dados realistas.
-Cria pelo menos 10 instâncias de cada entidade.
-
-Para executar:
-    python seed.py
-
-ou com uv:
-    python -m uv run python seed.py
-"""
-
 import sys
 import io
+import os
+import asyncio
 from datetime import date, timedelta
-from sqlmodel import Session, select
-from database import engine
+from beanie import init_beanie, Link
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+
 from models.aluno import Aluno
 from models.autor import Autor
 from models.livro import Livro
 from models.emprestimo import Emprestimo
-from models.livro_autor_link import LivroAutorLink
 
-# Configurar encoding UTF-8 para Windows
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+load_dotenv()
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 
-def limpar_banco():
-    """Remove todos os dados existentes (opcional - use com cuidado!)"""
+
+async def init_db():
+    client = AsyncIOMotorClient(MONGO_URL)
+    await init_beanie(
+        database=client.biblioteca,
+        document_models=[Aluno, Autor, Livro, Emprestimo],
+    )
+
+
+async def limpar_banco():
     print("🗑️  Limpando banco de dados...")
-    with Session(engine) as session:
-        # Ordem importa por causa das foreign keys
-        session.query(Emprestimo).delete()
-        session.query(LivroAutorLink).delete()
-        session.query(Livro).delete()
-        session.query(Autor).delete()
-        session.query(Aluno).delete()
-        session.commit()
+    await Emprestimo.delete_all()
+    await Livro.delete_all()
+    await Autor.delete_all()
+    await Aluno.delete_all()
     print("✅ Banco limpo!\n")
 
 
-def seed_alunos(session: Session):
-    """Cria 15 alunos realistas"""
+async def seed_alunos():
     print("📚 Criando alunos...")
 
     alunos_data = [
@@ -65,16 +61,14 @@ def seed_alunos(session: Session):
     alunos = []
     for data in alunos_data:
         aluno = Aluno(**data)
-        session.add(aluno)
+        await aluno.insert()
         alunos.append(aluno)
 
-    session.commit()
     print(f"✅ {len(alunos)} alunos criados!\n")
     return alunos
 
 
-def seed_autores(session: Session):
-    """Cria 12 autores clássicos e modernos da computação"""
+async def seed_autores():
     print("✍️  Criando autores...")
 
     autores_data = [
@@ -95,171 +89,116 @@ def seed_autores(session: Session):
     autores = []
     for data in autores_data:
         autor = Autor(**data)
-        session.add(autor)
+        await autor.insert()
         autores.append(autor)
 
-    session.commit()
     print(f"✅ {len(autores)} autores criados!\n")
     return autores
 
 
-def seed_livros(session: Session, autores: list[Autor]):
-    """Cria 15 livros clássicos de programação e engenharia de software"""
+async def seed_livros(autores):
     print("📖 Criando livros...")
 
     livros_data = [
-        {"titulo": "Clean Code", "ano": 2008, "isbn": "978-0132350884", "categoria": "Engenharia de Software"},
-        {"titulo": "Refactoring", "ano": 1999, "isbn": "978-0201485677", "categoria": "Engenharia de Software"},
-        {"titulo": "Domain-Driven Design", "ano": 2003, "isbn": "978-0321125217", "categoria": "Arquitetura"},
-        {"titulo": "Design Patterns", "ano": 1994, "isbn": "978-0201633610", "categoria": "Padrões de Projeto"},
-        {"titulo": "The Pragmatic Programmer", "ano": 1999, "isbn": "978-0201616224", "categoria": "Desenvolvimento"},
-        {"titulo": "Test Driven Development", "ano": 2002, "isbn": "978-0321146533", "categoria": "Testes"},
-        {"titulo": "Effective Java", "ano": 2017, "isbn": "978-0134685991", "categoria": "Java"},
-        {"titulo": "The C Programming Language", "ano": 1978, "isbn": "978-0131103627", "categoria": "Linguagens"},
-        {"titulo": "The Art of Computer Programming Vol 1", "ano": 1968, "isbn": "978-0201896831", "categoria": "Algoritmos"},
-        {"titulo": "The C++ Programming Language", "ano": 2013, "isbn": "978-0321563842", "categoria": "Linguagens"},
-        {"titulo": "Clean Architecture", "ano": 2017, "isbn": "978-0134494166", "categoria": "Arquitetura"},
-        {"titulo": "Refactoring to Patterns", "ano": 2004, "isbn": "978-0321213358", "categoria": "Padrões de Projeto"},
-        {"titulo": "Working Effectively with Legacy Code", "ano": 2004, "isbn": "978-0131177055", "categoria": "Manutenção"},
-        {"titulo": "Introduction to Algorithms", "ano": 2009, "isbn": "978-0262033848", "categoria": "Algoritmos"},
-        {"titulo": "Structure and Interpretation of Computer Programs", "ano": 1996, "isbn": "978-0262510871", "categoria": "Fundamentos"},
+        {"titulo": "Clean Code", "ano": 2008, "isbn": "978-0132350884", "categoria": "Engenharia de Software", "autores": [autores[0]]},
+        {"titulo": "Refactoring", "ano": 1999, "isbn": "978-0201485677", "categoria": "Engenharia de Software", "autores": [autores[1]]},
+        {"titulo": "Domain-Driven Design", "ano": 2003, "isbn": "978-0321125217", "categoria": "Arquitetura", "autores": [autores[2]]},
+        {"titulo": "Design Patterns", "ano": 1994, "isbn": "978-0201633610", "categoria": "Padrões de Projeto", "autores": [autores[3]]},
+        {"titulo": "The Pragmatic Programmer", "ano": 1999, "isbn": "978-0201616224", "categoria": "Desenvolvimento", "autores": [autores[4], autores[5]]},
+        {"titulo": "Test Driven Development", "ano": 2002, "isbn": "978-0321146533", "categoria": "Testes", "autores": [autores[6]]},
+        {"titulo": "Effective Java", "ano": 2017, "isbn": "978-0134685991", "categoria": "Java", "autores": [autores[7]]},
+        {"titulo": "The C Programming Language", "ano": 1978, "isbn": "978-0131103627", "categoria": "Linguagens", "autores": [autores[8], autores[9]]},
+        {"titulo": "The Art of Computer Programming Vol 1", "ano": 1968, "isbn": "978-0201896831", "categoria": "Algoritmos", "autores": [autores[10]]},
+        {"titulo": "The C++ Programming Language", "ano": 2013, "isbn": "978-0321563842", "categoria": "Linguagens", "autores": [autores[11]]},
+        {"titulo": "Clean Architecture", "ano": 2017, "isbn": "978-0134494166", "categoria": "Arquitetura", "autores": [autores[0]]},
+        {"titulo": "Refactoring to Patterns", "ano": 2004, "isbn": "978-0321213358", "categoria": "Padrões de Projeto", "autores": [autores[1]]},
+        {"titulo": "Working Effectively with Legacy Code", "ano": 2004, "isbn": "978-0131177055", "categoria": "Manutenção", "autores": [autores[0]]},
+        {"titulo": "Introduction to Algorithms", "ano": 2009, "isbn": "978-0262033848", "categoria": "Algoritmos", "autores": [autores[10]]},
+        {"titulo": "Structure and Interpretation of Computer Programs", "ano": 1996, "isbn": "978-0262510871", "categoria": "Fundamentos", "autores": [autores[10]]},
     ]
 
     livros = []
     for data in livros_data:
         livro = Livro(**data)
-        session.add(livro)
+        await livro.insert()
         livros.append(livro)
 
-    session.commit()
     print(f"✅ {len(livros)} livros criados!\n")
     return livros
 
 
-def vincular_livros_autores(session: Session, livros: list[Livro], autores: list[Autor]):
-    """Vincula livros com seus autores (relação N:N)"""
-    print("🔗 Vinculando livros aos autores...")
-
-    # Mapeamento: índice do livro -> índices dos autores
-    vinculacoes = {
-        0: [0],        # Clean Code -> Robert C. Martin
-        1: [1],        # Refactoring -> Martin Fowler
-        2: [2],        # DDD -> Eric Evans
-        3: [3],        # Design Patterns -> GoF
-        4: [4, 5],     # Pragmatic Programmer -> Hunt & Thomas
-        5: [6],        # TDD -> Kent Beck
-        6: [7],        # Effective Java -> Joshua Bloch
-        7: [8, 9],     # C Language -> Kernighan & Ritchie
-        8: [10],       # TAOCP -> Knuth
-        9: [11],       # C++ -> Stroustrup
-        10: [0],       # Clean Architecture -> Robert C. Martin
-        11: [1],       # Refactoring to Patterns -> Martin Fowler
-        12: [0],       # Legacy Code -> Robert C. Martin
-        13: [10],      # Intro to Algorithms -> Knuth
-        14: [10],      # SICP -> Knuth
-    }
-
-    for livro_idx, autores_idx in vinculacoes.items():
-        livro = livros[livro_idx]
-        for autor_idx in autores_idx:
-            autor = autores[autor_idx]
-            # Adiciona autor à lista de autores do livro
-            livro.autores.append(autor)
-
-    session.commit()
-    print(f"✅ Livros vinculados aos autores!\n")
-
-
-def seed_emprestimos(session: Session, alunos: list[Aluno], livros: list[Livro]):
-    """Cria 20 empréstimos (ativos no prazo, finalizados e atualmente atrasados)"""
+async def seed_emprestimos(alunos, livros):
     print("📋 Criando empréstimos...")
 
     hoje = date.today()
 
     emprestimos_data = [
-        {"aluno_id": alunos[0].id, "livro_id": livros[0].id, "data_emprestimo": hoje - timedelta(days=5), "data_devolucao_prevista": hoje + timedelta(days=9), "data_devolucao": None},
-        {"aluno_id": alunos[1].id, "livro_id": livros[1].id, "data_emprestimo": hoje - timedelta(days=3), "data_devolucao_prevista": hoje + timedelta(days=11), "data_devolucao": None},
-        {"aluno_id": alunos[2].id, "livro_id": livros[2].id, "data_emprestimo": hoje - timedelta(days=1), "data_devolucao_prevista": hoje + timedelta(days=13), "data_devolucao": None},
-        {"aluno_id": alunos[3].id, "livro_id": livros[3].id, "data_emprestimo": hoje - timedelta(days=2), "data_devolucao_prevista": hoje + timedelta(days=12), "data_devolucao": None},
-        
-        {"aluno_id": alunos[4].id, "livro_id": livros[4].id, "data_emprestimo": hoje - timedelta(days=20), "data_devolucao_prevista": hoje - timedelta(days=5), "data_devolucao": None},
-        {"aluno_id": alunos[5].id, "livro_id": livros[5].id, "data_emprestimo": hoje - timedelta(days=25), "data_devolucao_prevista": hoje - timedelta(days=10), "data_devolucao": None},
-        {"aluno_id": alunos[6].id, "livro_id": livros[6].id, "data_emprestimo": hoje - timedelta(days=45), "data_devolucao_prevista": hoje - timedelta(days=30), "data_devolucao": None},
-
-        {"aluno_id": alunos[7].id, "livro_id": livros[7].id, "data_emprestimo": hoje - timedelta(days=30), "data_devolucao_prevista": hoje - timedelta(days=16), "data_devolucao": hoje - timedelta(days=18)},
-        {"aluno_id": alunos[8].id, "livro_id": livros[8].id, "data_emprestimo": hoje - timedelta(days=25), "data_devolucao_prevista": hoje - timedelta(days=11), "data_devolucao": hoje - timedelta(days=12)},
-        {"aluno_id": alunos[9].id, "livro_id": livros[9].id, "data_emprestimo": hoje - timedelta(days=40), "data_devolucao_prevista": hoje - timedelta(days=26), "data_devolucao": hoje - timedelta(days=24)},
-        
-        {"aluno_id": alunos[10].id, "livro_id": livros[10].id, "data_emprestimo": hoje - timedelta(days=50), "data_devolucao_prevista": hoje - timedelta(days=36), "data_devolucao": hoje - timedelta(days=30)},
-        {"aluno_id": alunos[11].id, "livro_id": livros[11].id, "data_emprestimo": hoje - timedelta(days=45), "data_devolucao_prevista": hoje - timedelta(days=31), "data_devolucao": hoje - timedelta(days=25)},
-
-        {"aluno_id": alunos[12].id, "livro_id": livros[12].id, "data_emprestimo": hoje - timedelta(days=6), "data_devolucao_prevista": hoje + timedelta(days=8), "data_devolucao": None},
-        {"aluno_id": alunos[13].id, "livro_id": livros[13].id, "data_emprestimo": hoje - timedelta(days=8), "data_devolucao_prevista": hoje + timedelta(days=6), "data_devolucao": None},
-        {"aluno_id": alunos[14].id, "livro_id": livros[14].id, "data_emprestimo": hoje - timedelta(days=12), "data_devolucao_prevista": hoje + timedelta(days=2), "data_devolucao": None},
-        {"aluno_id": alunos[0].id, "livro_id": livros[11].id, "data_emprestimo": hoje - timedelta(days=9), "data_devolucao_prevista": hoje + timedelta(days=5), "data_devolucao": None},
+        {"aluno": alunos[0], "livro": livros[0], "data_emprestimo": hoje - timedelta(days=5), "data_devolucao_prevista": hoje + timedelta(days=9)},
+        {"aluno": alunos[1], "livro": livros[1], "data_emprestimo": hoje - timedelta(days=3), "data_devolucao_prevista": hoje + timedelta(days=11)},
+        {"aluno": alunos[2], "livro": livros[2], "data_emprestimo": hoje - timedelta(days=1), "data_devolucao_prevista": hoje + timedelta(days=13)},
+        {"aluno": alunos[3], "livro": livros[3], "data_emprestimo": hoje - timedelta(days=2), "data_devolucao_prevista": hoje + timedelta(days=12)},
+        {"aluno": alunos[4], "livro": livros[4], "data_emprestimo": hoje - timedelta(days=20), "data_devolucao_prevista": hoje - timedelta(days=5), "data_devolucao": hoje - timedelta(days=3)},
+        {"aluno": alunos[5], "livro": livros[5], "data_emprestimo": hoje - timedelta(days=15), "data_devolucao_prevista": hoje - timedelta(days=2), "data_devolucao": None},
+        {"aluno": alunos[6], "livro": livros[6], "data_emprestimo": hoje - timedelta(days=45), "data_devolucao_prevista": hoje - timedelta(days=30), "data_devolucao": hoje - timedelta(days=28)},
+        {"aluno": alunos[7], "livro": livros[7], "data_emprestimo": hoje - timedelta(days=30), "data_devolucao_prevista": hoje - timedelta(days=16), "data_devolucao": hoje - timedelta(days=18)},
+        {"aluno": alunos[8], "livro": livros[8], "data_emprestimo": hoje - timedelta(days=25), "data_devolucao_prevista": hoje - timedelta(days=11), "data_devolucao": hoje - timedelta(days=12)},
+        {"aluno": alunos[9], "livro": livros[9], "data_emprestimo": hoje - timedelta(days=40), "data_devolucao_prevista": hoje - timedelta(days=26), "data_devolucao": hoje - timedelta(days=24)},
+        {"aluno": alunos[10], "livro": livros[10], "data_emprestimo": hoje - timedelta(days=50), "data_devolucao_prevista": hoje - timedelta(days=36), "data_devolucao": hoje - timedelta(days=30)},
+        {"aluno": alunos[11], "livro": livros[11], "data_emprestimo": hoje - timedelta(days=45), "data_devolucao_prevista": hoje - timedelta(days=31), "data_devolucao": hoje - timedelta(days=25)},
+        {"aluno": alunos[12], "livro": livros[12], "data_emprestimo": hoje - timedelta(days=6), "data_devolucao_prevista": hoje + timedelta(days=8)},
+        {"aluno": alunos[13], "livro": livros[13], "data_emprestimo": hoje - timedelta(days=8), "data_devolucao_prevista": hoje + timedelta(days=6)},
+        {"aluno": alunos[14], "livro": livros[14], "data_emprestimo": hoje - timedelta(days=12), "data_devolucao_prevista": hoje + timedelta(days=2)},
+        {"aluno": alunos[0], "livro": livros[11], "data_emprestimo": hoje - timedelta(days=9), "data_devolucao_prevista": hoje + timedelta(days=5)},
+        {"aluno": alunos[1], "livro": livros[10], "data_emprestimo": hoje - timedelta(days=7), "data_devolucao_prevista": hoje + timedelta(days=7)},
+        {"aluno": alunos[2], "livro": livros[9], "data_emprestimo": hoje - timedelta(days=15), "data_devolucao_prevista": hoje + timedelta(days=1)},
+        {"aluno": alunos[3], "livro": livros[8], "data_emprestimo": hoje - timedelta(days=18), "data_devolucao_prevista": hoje - timedelta(days=2), "data_devolucao": hoje - timedelta(days=1)},
+        {"aluno": alunos[4], "livro": livros[7], "data_emprestimo": hoje - timedelta(days=20), "data_devolucao_prevista": hoje - timedelta(days=5), "data_devolucao": hoje - timedelta(days=4)},
     ]
 
     emprestimos = []
     for data in emprestimos_data:
         emprestimo = Emprestimo(**data)
-        session.add(emprestimo)
+        await emprestimo.insert()
         emprestimos.append(emprestimo)
 
-    session.commit()
-    print(f"✅ {len(emprestimos)} empréstimos criados!")
-    print(f"   - Sendo 3 atualmente atrasados (Alunos ID: {alunos[4].id}, {alunos[5].id}, {alunos[6].id})")
+    print(f"✅ {len(emprestimos)} empréstimos criados!\n")
     return emprestimos
 
-def exibir_estatisticas(session: Session):
-    """Exibe estatísticas do banco populado"""
+
+async def main():
+    print("\n🌱 INICIANDO SEED DO BANCO DE DADOS\n")
+    await init_db()
+
+    total_alunos = await Aluno.count()
+    if total_alunos > 0:
+        print(f"⚠️  O banco já contém {total_alunos} alunos.")
+        resposta = input("Deseja limpar o banco e começar do zero? (s/N): ")
+        if resposta.lower() in ['s', 'sim', 'y', 'yes']:
+            await limpar_banco()
+        else:
+            print("❌ Seed cancelado. Banco mantido como está.")
+            return
+
+    alunos = await seed_alunos()
+    autores = await seed_autores()
+    livros = await seed_livros(autores)
+    await seed_emprestimos(alunos, livros)
+
+    # Exibir estatísticas
     print("=" * 50)
     print("📊 ESTATÍSTICAS DO BANCO DE DADOS")
     print("=" * 50)
-
-    total_alunos = len(session.exec(select(Aluno)).all())
-    total_autores = len(session.exec(select(Autor)).all())
-    total_livros = len(session.exec(select(Livro)).all())
-    total_emprestimos = len(session.exec(select(Emprestimo)).all())
-    emprestimos_ativos = len(session.exec(select(Emprestimo).where(Emprestimo.data_devolucao == None)).all())
-
-    print(f"👨‍🎓 Alunos cadastrados: {total_alunos}")
-    print(f"✍️  Autores cadastrados: {total_autores}")
-    print(f"📚 Livros no acervo: {total_livros}")
-    print(f"📋 Total de empréstimos: {total_emprestimos}")
-    print(f"🔄 Empréstimos ativos: {emprestimos_ativos}")
-    print(f"✅ Empréstimos finalizados: {total_emprestimos - emprestimos_ativos}")
+    print(f"👨‍🎓 Alunos cadastrados: {await Aluno.count()}")
+    print(f"✍️  Autores cadastrados: {await Autor.count()}")
+    print(f"📚 Livros no acervo: {await Livro.count()}")
+    print(f"📋 Total de empréstimos: {await Emprestimo.count()}")
+    emprestimos_ativos = await Emprestimo.find({"data_devolucao": None}).to_list()
+    print(f"🔄 Empréstimos ativos: {len(emprestimos_ativos)}")
+    print(f"✅ Empréstimos finalizados: {await Emprestimo.count() - len(emprestimos_ativos)}")
     print("=" * 50)
-
-
-def main():
-    """Função principal que executa todo o seed"""
-    print("\n🌱 INICIANDO SEED DO BANCO DE DADOS\n")
-
-    # Verificar se já existem dados no banco
-    with Session(engine) as session:
-        total_alunos = len(session.exec(select(Aluno)).all())
-        if total_alunos > 0:
-            print(f"⚠️  O banco já contém {total_alunos} alunos.")
-            resposta = input("Deseja limpar o banco e começar do zero? (s/N): ")
-            if resposta.lower() in ['s', 'sim', 'y', 'yes']:
-                limpar_banco()
-            else:
-                print("❌ Seed cancelado. Banco mantido como está.")
-                return
-
-    with Session(engine) as session:
-        # Criar dados na ordem correta (respeitando foreign keys)
-        alunos = seed_alunos(session)
-        autores = seed_autores(session)
-        livros = seed_livros(session, autores)
-        vincular_livros_autores(session, livros, autores)
-        emprestimos = seed_emprestimos(session, alunos, livros)
-
-        # Exibir estatísticas
-        exibir_estatisticas(session)
 
     print("\n🎉 SEED CONCLUÍDO COM SUCESSO!\n")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
