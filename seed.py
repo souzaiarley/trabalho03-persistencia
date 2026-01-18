@@ -17,7 +17,7 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 load_dotenv()
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL = os.getenv("DATABASE_URL", "mongodb://localhost:27017")
 
 
 async def init_db():
