@@ -3,7 +3,7 @@ import io
 import os
 import asyncio
 from datetime import date, timedelta
-from beanie import init_beanie, Link
+from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
-from typing import List, Optional
+from typing import List
 from models.livro import Livro, LivroCreate, LivroUpdate, LivroOut, LivroComEstatisticas
 from models.autor import Autor, AutorOut
-from models.emprestimo import Emprestimo, EmprestimoFull, EmprestimoWithLivroOut
+from models.emprestimo import Emprestimo, EmprestimoFull
 from models.aluno import AlunoOut
 
 router = APIRouter(
@@ -224,7 +224,7 @@ async def get_livros_mais_emprestados(
     
     livros_com_stats = []
     for stat in stats:
-        if stat["_id"] is None: continue # Skip if book is not linked correctly
+        if stat["_id"] is None: continue
         livro = await Livro.get(stat["_id"])
         if livro:
             livro_dict = livro.model_dump()

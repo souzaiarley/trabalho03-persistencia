@@ -26,7 +26,7 @@ class EstatisticasGerais(BaseModel):
 @router.get("/", response_model=EstatisticasGerais)
 async def get_estatisticas_gerais():
     """
-    Retorna estatísticas gerais do sistema de biblioteca (Versão NoSQL).
+    Retorna estatísticas gerais do sistema de biblioteca.
     """
     total_alunos = await Aluno.count()
     total_autores = await Autor.count()

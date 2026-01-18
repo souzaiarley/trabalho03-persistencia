@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from beanie import PydanticObjectId
 from datetime import date
-from typing import List, Optional
+from typing import List
 from models.emprestimo import Emprestimo, EmprestimoCreate, EmprestimoUpdate, EmprestimoFull, EmprestimoOut
 from models.aluno import Aluno, AlunoOut
 from models.livro import Livro, LivroOut
